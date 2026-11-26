@@ -60,9 +60,13 @@ def page_markdown(data, node_index, angle, neighbour, is_exit):
     else:
         fire = f'<a href="{page_name(x, y, angle)}">💥</a>'
     facing = DIRECTION_NAMES[angle]
+    picture = f'<img src="../assets/doom_{x}_{y}_{angle}.webp" alt="E1M1 facing {facing}" width="640">'
+    forward = moved(0)
+    if forward is not None:
+        picture = f'<a href="{page_name(*forward)}">{picture}</a>'
 
     return f"""<p align="center">
-<img src="../assets/doom_{x}_{y}_{angle}.webp" alt="E1M1 facing {facing}" width="640">
+{picture}
 </p>
 
 <table align="center">
