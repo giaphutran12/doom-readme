@@ -39,7 +39,9 @@ screenshots in `assets/`.
 2. `generator/capture.py` teleports a headless [ViZDoom](https://github.com/Farama-Foundation/ViZDoom)
    player to each spot and saves one WebP per facing angle.
 3. `generator/linker.py` writes the interlinked markdown pages and this README.
-4. The whole pipeline runs on GitHub Actions (`.github/workflows/render.yml`), not on a laptop.
+4. `generator/record_demo.py` records the gameplay GIF at the top of the profile (`static/doom-demo.gif`): the
+   shortest route to the exit with monsters on, auto-aiming the shotgun at every monster in view.
+5. Rendering runs on a rented cloud box or GitHub Actions (`.github/workflows/render.yml`), not on a laptop.
 
 ## Credits and licenses
 
