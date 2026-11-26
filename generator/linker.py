@@ -6,7 +6,7 @@ trigger comes from the level's own exit switch instead of hard-coded coordinates
 
 Controls on every page:
         up-left   up   up-right        forward-left, forward, forward-right
-        turn-left fire turn-right      turn 90 degrees in place, fire (stay put / finish at the exit)
+        turn-left fire turn-right      turn 90 degrees in place, fire (muzzle-flash frame / finish at the exit)
         down-left down down-right      back-left, back, back-right
 """
 
@@ -18,8 +18,12 @@ DIRECTION_NAMES = {0: "East", 90: "North", 180: "West", 270: "South"}
 SPAWN_ANGLE_NAME = "spawn"
 
 
-def page_name(x, y, angle):
-    return f"{x}_{y}_{angle}.md"
+def page_name(x, y, angle, firing=False):
+    return f"{x}_{y}_{angle}{'_fire' if firing else ''}.md"
+
+
+def frame_name(x, y, angle, firing=False):
+    return f"doom_{x}_{y}_{angle}{'_fire' if firing else ''}.webp"
 
 
 def link_or_ghost(label, target):
@@ -38,7 +42,7 @@ def build_neighbour_lookup(data):
     return neighbour
 
 
-def page_markdown(data, node_index, angle, neighbour, is_exit):
+def page_markdown(data, node_index, angle, neighbour, is_exit, firing=False):
     x, y = data["nodes"][node_index]
 
     def moved(offset):
@@ -58,9 +62,11 @@ def page_markdown(data, node_index, angle, neighbour, is_exit):
     if is_exit:
         fire = '<a href="end_game.md">💥</a>'
     else:
-        fire = f'<a href="{page_name(x, y, angle)}">💥</a>'
+        fire = f'<a href="{page_name(x, y, angle, firing=not firing)}">💥</a>'
     facing = DIRECTION_NAMES[angle]
-    picture = f'<img src="../assets/doom_{x}_{y}_{angle}.webp" alt="E1M1 facing {facing}" width="640">'
+    action = ", firing" if firing else ""
+    picture = (f'<img src="../assets/{frame_name(x, y, angle, firing)}" '
+               f'alt="E1M1 facing {facing}{action}" width="640">')
     forward = moved(0)
     if forward is not None:
         picture = f'<a href="{page_name(*forward)}">{picture}</a>'
@@ -126,11 +132,12 @@ def main():
     written = 0
     for node_index, (x, y) in enumerate(data["nodes"]):
         for angle in data["angles"]:
-            if not (Path(args.assets_dir) / f"doom_{x}_{y}_{angle}.webp").exists():
-                missing.append((x, y, angle))
-            text = page_markdown(data, node_index, angle, neighbour, node_index in exit_nodes)
-            (game_dir / page_name(x, y, angle)).write_text(text, encoding="utf-8")
-            written += 1
+            for firing in (False, True):
+                if not (Path(args.assets_dir) / frame_name(x, y, angle, firing)).exists():
+                    missing.append((x, y, angle, "fire" if firing else "view"))
+                text = page_markdown(data, node_index, angle, neighbour, node_index in exit_nodes, firing)
+                (game_dir / page_name(x, y, angle, firing)).write_text(text, encoding="utf-8")
+                written += 1
 
     spawn_x, spawn_y = data["nodes"][data["spawn"]["node"]]
     start_page = page_name(spawn_x, spawn_y, data["spawn"]["angle"])
@@ -140,7 +147,7 @@ def main():
     if args.readme_template:
         text = Path(args.readme_template).read_text(encoding="utf-8")
         for key, value in {"START_PAGE": f"game/{start_page}", "NODES": f"{len(data['nodes']):,}",
-                           "FRAMES": f"{written:,}"}.items():
+                           "FRAMES": f"{written // 2:,}", "ALL_FRAMES": f"{written:,}"}.items():
             text = text.replace("{{" + key + "}}", value)
         Path(args.readme_out).write_text(text, encoding="utf-8")
         print(f"wrote {args.readme_out} from {args.readme_template}", flush=True)

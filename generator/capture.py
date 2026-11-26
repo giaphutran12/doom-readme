@@ -16,9 +16,11 @@ import vizdoom as vzd
 POSITION_TOLERANCE = 16.0
 ANGLE_TOLERANCE = 1.0
 WEAPON_RAISE_TICS = 24
+FLASH_TIC = 6
+SETTLE_TICS = 24
 
 
-def build_game(iwad, pwad, map_name, width, height):
+def build_game(iwad, pwad, map_name, width, height, with_trigger=False):
     game = vzd.DoomGame()
     game.set_doom_game_path(str(iwad))
     game.set_doom_scenario_path(str(pwad))
@@ -35,6 +37,8 @@ def build_game(iwad, pwad, map_name, width, height):
     game.set_render_particles(False)
     game.set_render_screen_flashes(False)
     game.add_available_button(vzd.Button.TURN_LEFT_RIGHT_DELTA)
+    if with_trigger:
+        game.add_available_button(vzd.Button.ATTACK)
     game.add_available_game_variable(vzd.GameVariable.ANGLE)
     game.add_available_game_variable(vzd.GameVariable.POSITION_X)
     game.add_available_game_variable(vzd.GameVariable.POSITION_Y)
@@ -59,23 +63,38 @@ def shortest_turn(target, current):
     return diff
 
 
+def act(game, turn, trigger=0):
+    action = [turn, trigger]
+    game.make_action(action[:game.get_available_buttons_size()])
+
+
 def face(game, target_angle):
     for _ in range(10):
         current = game.get_game_variable(vzd.GameVariable.ANGLE)
         diff = shortest_turn(target_angle, current)
         if abs(diff) < ANGLE_TOLERANCE:
             break
-        game.make_action([diff])
-    game.make_action([0])
+        act(game, diff)
+    act(game, 0)
 
 
 def teleport(game, x, y):
     game.new_episode()
     game.send_game_command(f"warp {x} {y}")
     for _ in range(WEAPON_RAISE_TICS):
-        game.make_action([0])
+        act(game, 0)
     here = (game.get_game_variable(vzd.GameVariable.POSITION_X), game.get_game_variable(vzd.GameVariable.POSITION_Y))
     return math.hypot(here[0] - x, here[1] - y) <= POSITION_TOLERANCE
+
+
+def fire_and_snapshot(game, path, quality):
+    """Pull the trigger and save the frame with the muzzle flash, then let the pistol settle."""
+    for _ in range(FLASH_TIC):
+        act(game, 0, trigger=1)
+    saved = snapshot(game, path, quality)
+    for _ in range(SETTLE_TICS):
+        act(game, 0)
+    return saved
 
 
 def snapshot(game, path, quality):
@@ -101,6 +120,7 @@ def main():
     parser.add_argument("--quality", type=int, default=75)
     parser.add_argument("--shard", default="0/1", help="index/count")
     parser.add_argument("--limit", type=int, default=0, help="render only the first N nodes of this shard")
+    parser.add_argument("--fire", action="store_true", help="render the muzzle-flash frame for every view instead")
     args = parser.parse_args()
 
     data = json.loads(Path(args.data).read_text())
@@ -111,16 +131,17 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     print(f"shard {shard_index}/{shard_count}: {len(mine)} nodes, {len(mine) * len(data['angles'])} frames, "
-          f"{args.width}x{args.height} webp q{args.quality}", flush=True)
+          f"{args.width}x{args.height} webp q{args.quality}, fire={args.fire}", flush=True)
 
-    game = build_game(args.iwad, args.pwad, args.map, args.width, args.height)
+    game = build_game(args.iwad, args.pwad, args.map, args.width, args.height, with_trigger=args.fire)
     started = time.time()
     rendered = skipped = failed = 0
     failed_nodes = []
     try:
         for count, index in enumerate(mine, 1):
             x, y = data["nodes"][index]
-            paths = {angle: out / f"doom_{x}_{y}_{angle}.webp" for angle in data["angles"]}
+            suffix = "_fire" if args.fire else ""
+            paths = {angle: out / f"doom_{x}_{y}_{angle}{suffix}.webp" for angle in data["angles"]}
             if all(path.exists() for path in paths.values()):
                 skipped += 1
                 continue
@@ -130,9 +151,12 @@ def main():
                 print(f"teleport rejected node={index} x={x} y={y}", flush=True)
                 continue
             for angle, path in paths.items():
+                if args.fire:
+                    teleport(game, x, y)
                 face(game, angle)
-                game.make_action([0])
-                if snapshot(game, path, args.quality):
+                act(game, 0)
+                take = fire_and_snapshot if args.fire else snapshot
+                if take(game, path, args.quality):
                     rendered += 1
                 else:
                     failed += 1

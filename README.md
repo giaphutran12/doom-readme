@@ -20,7 +20,7 @@ next view, so clicking an arrow "moves" you.
 | ⬆️ / ⬇️ | Walk forward / backward |
 | ↖️ ↗️ ↙️ ↘️ | Sidestep diagonally while still facing the same way |
 | ⬅️ / ➡️ | Turn 90 degrees in place |
-| 💥 | Fire (nothing happens, except at the exit, where it ends the level) |
+| 💥 | Fire the pistol (click again to fire again). At the exit, it ends the level |
 | faded arrow | A wall or a drop is in the way |
 
 Find the exit room and fire at the switch to finish the level.

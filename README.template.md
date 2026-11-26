@@ -20,14 +20,15 @@ next view, so clicking an arrow "moves" you.
 | ⬆️ / ⬇️ | Walk forward / backward |
 | ↖️ ↗️ ↙️ ↘️ | Sidestep diagonally while still facing the same way |
 | ⬅️ / ➡️ | Turn 90 degrees in place |
-| 💥 | Fire (nothing happens, except at the exit, where it ends the level) |
+| 💥 | Fire the pistol (click again to fire again). At the exit, it ends the level |
 | faded arrow | A wall or a drop is in the way |
 
 Find the exit room and fire at the switch to finish the level.
 
 ## What is this?
 
-{{NODES}} walkable spots x 4 facing directions = {{FRAMES}} screenshots, each with its own markdown page.
+{{NODES}} walkable spots x 4 facing directions = {{FRAMES}} views, each with a firing version too:
+{{ALL_FRAMES}} screenshots, each with its own markdown page.
 No JavaScript, no server: GitHub just renders static pages and links. The pages are in `game/`, the
 screenshots in `assets/`.
 
