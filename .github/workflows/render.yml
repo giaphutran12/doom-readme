@@ -1,0 +1,95 @@
+name: render
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Render only the first N nodes (0 = everything). A limited run never publishes."
+        default: "0"
+      publish:
+        description: "Commit the rendered game back to main"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  FREEDOOM_URL: https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0.13.0.zip
+  FREEDOOM_SHA256: 3f9b264f3e3ce503b4fb7f6bdcb1f419d93c7b546f4df3e874dd878db9688f59
+  SDL_VIDEODRIVER: dummy
+  SDL_AUDIODRIVER: dummy
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install renderer
+        run: pip install -r requirements.txt
+
+      - name: Download Freedoom and verify checksum
+        run: |
+          mkdir -p build
+          curl -fsSL "$FREEDOOM_URL" -o build/freedoom.zip
+          echo "$FREEDOOM_SHA256  build/freedoom.zip" | sha256sum -c -
+          unzip -j -o build/freedoom.zip "freedoom-0.13.0/freedoom1.wad" -d build
+          ls -l build/freedoom1.wad
+
+      - name: Build the walkable position graph
+        run: python generator/mapdata.py --wad build/freedoom1.wad --out build
+
+      - name: Render frames
+        run: |
+          python generator/capture.py \
+            --iwad build/freedoom1.wad --pwad build/patched_E1M1.wad \
+            --data build/map_data.json --out assets \
+            --limit "${{ inputs.limit }}"
+
+      - name: Write pages, banner and README
+        if: inputs.limit == '0'
+        run: |
+          cp build/map_data.json map_data.json
+          python generator/static_images.py --data map_data.json --assets-dir assets --out-dir static
+          python generator/linker.py --data map_data.json --game-dir game --assets-dir assets \
+            --readme-template README.template.md --readme-out README.md --strict-assets
+
+      - name: Size report and limits
+        run: |
+          echo "files:  $(git ls-files --others --exclude-standard | wc -l) new"
+          du -sh assets game static 2>/dev/null || true
+          echo "largest files:"
+          find assets game static -type f -printf '%s %p\n' 2>/dev/null | sort -rn | head -3
+          biggest=$(find assets game static -type f -printf '%s\n' 2>/dev/null | sort -rn | head -1)
+          echo "largest file bytes: ${biggest:-0} (GitHub hard limit 100 MB)"
+          test "${biggest:-0}" -lt 52428800
+          total=$(du -sb assets game static 2>/dev/null | awk '{s+=$1} END {print s+0}')
+          echo "total bytes: $total (budget 400 MB)"
+          test "$total" -lt 419430400
+
+      - name: Upload a sample of frames
+        if: inputs.limit != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-frames
+          path: assets/
+
+      - name: Commit the rendered game
+        if: inputs.limit == '0' && inputs.publish
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets game static map_data.json README.md
+          if git diff --cached --quiet; then
+            echo "nothing changed, nothing to commit"
+          else
+            git commit -m "Render E1M1: $(git diff --cached --name-only | wc -l) files"
+            git push
+          fi
